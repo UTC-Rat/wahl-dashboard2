@@ -132,33 +132,36 @@ else:
         st.info("Bitte mindestens eine Wahl auswählen.")
         st.stop()
 
-    pro_wahl: dict[str, pd.Series] = {}
+    rohdaten: dict[str, pd.DataFrame] = {}
     fehlend: list[str] = []
     for wahlname in auswahl:
         df = vergleichsdaten(wahlname, level)
         if df is None:
             fehlend.append(wahlname)
             continue
-        pro_wahl[wahlname] = df.groupby("Partei")["Stimmen"].sum()
+        rohdaten[wahlname] = df
 
     if fehlend:
         st.warning(f"Für die Ebene „{level}“ keine Daten verfügbar: {', '.join(fehlend)}")
-    if not pro_wahl:
+    if not rohdaten:
         st.info("Für diese Kombination aus Wahlen und Ebene liegen keine Daten vor. Wähle eine andere Ebene.")
         st.stop()
 
-    sortierte_wahlen = sorted(pro_wahl, key=lambda w: (jahr(w), w))
+    sortierte_wahlen = sorted(rohdaten, key=lambda w: (jahr(w), w))
 
     if level == "Stadt gesamt":
         gebiet = "Stadt Wuppertal"
     else:
-        gemeinsame = set.intersection(*[set(df["gebiet-name"].unique()) for df in [
-            vergleichsdaten(w, level) for w in sortierte_wahlen
-        ]])
+        gemeinsame = set.intersection(*[set(df["gebiet-name"].unique()) for df in rohdaten.values()])
         if not gemeinsame:
             st.error("Die gewählten Wahlen haben auf dieser Ebene keine gemeinsamen Gebiete (z. B. Stimmbezirke vs. Kommunalwahlbezirke). Bitte Ebene wechseln.")
             st.stop()
         gebiet = st.selectbox("Gebiet", sorted(gemeinsame))
+
+    pro_wahl: dict[str, pd.Series] = {}
+    for wahlname, df in rohdaten.items():
+        ausschnitt = df if level == "Stadt gesamt" else df[df["gebiet-name"] == gebiet]
+        pro_wahl[wahlname] = ausschnitt.groupby("Partei")["Stimmen"].sum()
 
     stimmen_matrix = pd.DataFrame({
         w: pro_wahl[w] for w in sortierte_wahlen
