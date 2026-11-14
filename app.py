@@ -13,6 +13,7 @@ from data import (
     verfuegbare_ebenen,
     vergleich_url,
 )
+from referenz import REFERENZEN, REFERENZ_LABELS, REFERENZ_TYPEN, WAHL_REFERENZ, referenz_schluessel
 
 st.set_page_config(page_title="Wahlergebnisse Wuppertal", page_icon="🗳️", layout="wide")
 st.title("🗳️ Wahlergebnisse Wuppertal")
@@ -53,7 +54,7 @@ def jahr(name: str) -> int:
     return int(treffer.group(1)) if treffer else 0
 
 
-modus = st.radio("Ansicht", ["Einzelwahl", "Wahlvergleich"], horizontal=True)
+modus = st.radio("Ansicht", ["Einzelwahl", "Wahlvergleich", "Überregional"], horizontal=True)
 
 if modus == "Einzelwahl":
     wahlname = st.selectbox("Wahl", list(WAHLEN))
@@ -117,7 +118,7 @@ if modus == "Einzelwahl":
             use_container_width=True, hide_index=True, height=420,
         )
 
-else:
+elif modus == "Wahlvergleich":
     st.subheader("Wahlvergleich")
     st.caption("Mehrere Wahlen, eine Ebene, ein Gebiet – Stimmen und Anteile im Zeitverlauf")
 
@@ -219,3 +220,111 @@ else:
         ]
     formatiert.index.name = "Partei"
     st.dataframe(formatiert, use_container_width=True, height=420)
+
+else:
+    st.subheader("Überregionaler Vergleich")
+    st.caption("Wuppertaler Stadtergebnis vs. überregionales Ergebnis – Abstand in Prozentpunkten (pp)")
+
+    auswahl = st.multiselect(
+        "Wahlen (mehrfach auswählbar)",
+        list(WAHLEN),
+        default=["Bundestagswahl 2025", "Bundestagswahl 2021", "Bundestagswahl 2017"],
+    )
+    if not auswahl:
+        st.info("Bitte mindestens eine Wahl auswählen.")
+        st.stop()
+
+    kommunal = [w for w in auswahl if len(WAHL_REFERENZ[w]) > 1]
+    if kommunal:
+        typ_label = st.radio(
+            "Referenz für Kommunalwahlen",
+            [REFERENZ_LABELS[t] for t in REFERENZ_TYPEN],
+            horizontal=True,
+        )
+        typ = next(t for t, label in REFERENZ_LABELS.items() if label == typ_label)
+    else:
+        typ = "Bund/Europa"
+
+    zeilen = []
+    for wahlname in sorted(auswahl, key=lambda w: (jahr(w), w)):
+        df = ergebnisse(wahlname, "Stadt gesamt")
+        stimmen = df.groupby("Partei")["Stimmen"].sum()
+        gesamt = stimmen.sum()
+        referenz = REFERENZEN[WAHL_REFERENZ[wahlname][typ]]
+        for partei, stimme in stimmen.items():
+            schluessel = referenz_schluessel(partei)
+            if schluessel is None or schluessel not in referenz["ergebnis"]:
+                continue
+            wuppertal_pct = stimme / gesamt * 100
+            zeilen.append({
+                "Wahl": wahlname,
+                "Partei": schluessel,
+                "Wuppertal %": round(wuppertal_pct, 1),
+                "Überregional %": referenz["ergebnis"][schluessel],
+                "Abstand (pp)": round(wuppertal_pct - referenz["ergebnis"][schluessel], 1),
+            })
+
+    if not zeilen:
+        st.info("Für diese Wahlen liegen keine vergleichbaren Parteien vor.")
+        st.stop()
+
+    daten = pd.DataFrame(zeilen)
+    sortierte_wahlen = sorted(daten["Wahl"].unique(), key=lambda w: (jahr(w), w))
+
+    alle_parteien = sorted(daten["Partei"].unique())
+    letzte = sortierte_wahlen[-1]
+    in_allen = [p for p in alle_parteien if len(daten[daten["Partei"] == p]) == len(sortierte_wahlen)]
+    basis = daten[(daten["Wahl"] == letzte) & (daten["Partei"].isin(in_allen))]
+    if basis.empty:
+        basis = daten[daten["Wahl"] == letzte]
+    vorschlag = list(basis.sort_values("Wuppertal %", ascending=False).head(3)["Partei"])
+    parteien = st.multiselect("Parteien im Vergleich", alle_parteien, default=vorschlag)
+    if not parteien:
+        st.info("Bitte mindestens eine Partei auswählen.")
+        st.stop()
+
+    ansicht = daten[daten["Partei"].isin(parteien)]
+    farben = farben_fuer(parteien)
+
+    b1, b2 = st.columns(2)
+    with b1:
+        lang = ansicht.melt(
+            id_vars=["Wahl", "Partei"],
+            value_vars=["Wuppertal %", "Überregional %"],
+            var_name="Ebene", value_name="Prozent",
+        )
+        lang["Ebene"] = lang["Ebene"].replace({"Wuppertal %": "Wuppertal", "Überregional %": "Überregional"})
+        fig_balken = px.bar(
+            lang, x="Wahl", y="Prozent", color="Partei", pattern_shape="Ebene", barmode="group",
+            title="Wuppertal vs. Überregional (Prozent) – schraffiert = überregional",
+            color_discrete_map=farben,
+            category_orders={"Wahl": sortierte_wahlen, "Partei": parteien},
+        )
+        fig_balken.update_layout(height=460)
+        st.plotly_chart(fig_balken, use_container_width=True)
+    with b2:
+        fig_abstand = px.line(
+            ansicht, x="Wahl", y="Abstand (pp)", color="Partei", markers=True,
+            title="Abstand in Prozentpunkten (Wuppertal minus Überregional)",
+            color_discrete_map=farben,
+            category_orders={"Wahl": sortierte_wahlen, "Partei": parteien},
+        )
+        fig_abstand.add_hline(y=0, line_dash="dot", line_color="grey")
+        fig_abstand.update_layout(height=460, legend_title_text="Partei")
+        st.plotly_chart(fig_abstand, use_container_width=True)
+
+    st.markdown("#### Tabelle: Wuppertal % / Überregional % / Abstand (pp)")
+    tabelle = pd.DataFrame(index=parteien, columns=sortierte_wahlen, dtype=object)
+    for _, z in ansicht.iterrows():
+        tabelle.loc[z["Partei"], z["Wahl"]] = (
+            f"{z['Wuppertal %']:.1f} / {z['Überregional %']:.1f} ({z['Abstand (pp)']:+.1f})"
+        )
+    tabelle.index.name = "Partei"
+    st.dataframe(tabelle, use_container_width=True, height=420)
+
+    st.caption(
+        "Referenzdaten: Bundestags-/Europawahlen bundesweit (Der Bundeswahlleiter) und "
+        "Landtagswahlen NRW (Landeswahlleiterin), jeweils Zweitstimmenanteile; "
+        "CDU und CSU zusammengefasst. Kommunalwahlen werden mit der zeitlich nächsten "
+        "überregionalen Wahl verglichen."
+    )
