@@ -18,17 +18,17 @@ st.title("🗳️ Wahlergebnisse Wuppertal")
 st.caption("Datenquelle: wahlen.wuppertal.de (Open Data) · Bundestags-, Rats-, Europa-, Integrationsrats- und Oberbürgermeisterwahlen")
 
 
-@st.cache_data(ttl=600, show_spinner="Lade Wahlergebnisse ...")
+@st.cache_data(ttl=86400, show_spinner="Lade Wahlergebnisse ...")
 def ergebnisse(wahlname: str, ebene: str) -> pd.DataFrame:
     return lade_ergebnisse(WAHLEN[wahlname], ebene)
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=86400, show_spinner=False)
 def ebenen_fuer(wahlname: str) -> list[str]:
     return list(verfuegbare_ebenen(WAHLEN[wahlname]))
 
 
-@st.cache_data(ttl=600, show_spinner="Lade Vergleichsdaten ...")
+@st.cache_data(ttl=86400, show_spinner="Lade Vergleichsdaten ...")
 def vergleichsdaten(wahlname: str, level: str) -> pd.DataFrame | None:
     url = vergleich_url(WAHLEN[wahlname], level)
     if url is None:
@@ -58,8 +58,11 @@ if modus == "Einzelwahl":
     wahlname = st.selectbox("Wahl", list(WAHLEN))
     try:
         ebenen = ebenen_fuer(wahlname)
-    except Exception:
-        st.error("Die Daten von wahlen.wuppertal.de konnten nicht geladen werden. Bitte später erneut versuchen.")
+    except Exception as e:
+        st.error(
+            "Die Daten von wahlen.wuppertal.de konnten nicht geladen werden. "
+            f"Bitte später erneut versuchen. (Fehler: {type(e).__name__}: {e})"
+        )
         st.stop()
 
     ebene = st.radio("Ebene", ebenen, horizontal=True)
