@@ -529,3 +529,64 @@ def lade_ergebnisse(wahl: dict, ebene: str = "Wahlbezirke") -> pd.DataFrame:
     lang = stimmen.melt(id_vars="gebiet-name", var_name="Partei", value_name="Stimmen")
     lang["Stimmart"] = wahl["stimmentyp"]
     return lang[lang["Stimmen"] > 0]
+
+# Uebliche Parteifarben (medienuebliche Kanonisierung)
+PARTEI_FARBEN = {
+    "SPD": "#E3000F",
+    "CDU": "#000000",
+    "GRÜNE": "#46962B",
+    "FDP": "#FFED00",
+    "AfD": "#009EE3",
+    "Die Linke": "#BE3075",
+    "BSW": "#8E44AD",
+    "Volt": "#502379",
+    "Die PARTEI": "#644387",
+    "FREIE WÄHLER": "#F58220",
+    "Tierschutzpartei": "#0072BC",
+    "PIRATEN": "#FF8800",
+    "dieBasis": "#696969",
+    "NPD": "#7B5B3A",
+    "REP": "#5C4033",
+    "ÖDP": "#E8A000",
+    "MLPD": "#CC0000",
+    "DKP": "#D2122E",
+    "FAMILIE": "#F49AB5",
+    "Sonstige": "#9E9E9E",
+}
+
+_FARBREGELN = [
+    ("TIERSCHUTZ", "#0072BC"),
+    ("DIE PARTEI", "#644387"),
+    ("PARTEI DER VERNUNFT", "#B5651D"),
+    ("SPD", "#E3000F"),
+    ("CDU", "#000000"),
+    ("CSU", "#008CA0"),
+    ("GRUN", "#46962B"),
+    ("FDP", "#FFED00"),
+    ("AFD", "#009EE3"),
+    ("LINKE", "#BE3075"),
+    ("BSW", "#8E44AD"),
+    ("VOLT", "#502379"),
+    ("FREIE WAHLER", "#F58220"),
+    ("WFW", "#F58220"),
+    ("PIRATEN", "#FF8800"),
+    ("DIEBASIS", "#696969"),
+    ("NPD", "#7B5B3A"),
+    ("REP", "#5C4033"),
+    ("ODP", "#E8A000"),
+    ("MLPD", "#CC0000"),
+    ("DKP", "#D2122E"),
+    ("FAMILIE", "#F49AB5"),
+    ("HEIMAT", "#6B8E23"),
+    ("SONSTIGE", "#9E9E9E"),
+]
+
+_ERSETZUNGEN = str.maketrans({"Ä": "A", "Ö": "O", "Ü": "U", "ß": "ss", "³": "3"})
+
+
+def partei_farbe(name: str) -> str | None:
+    normalisiert = name.upper().translate(_ERSETZUNGEN).strip()
+    for muster, farbe in _FARBREGELN:
+        if muster in normalisiert:
+            return farbe
+    return None

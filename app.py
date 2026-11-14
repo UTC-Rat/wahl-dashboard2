@@ -2,7 +2,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from data import WAHLEN, lade_ergebnisse, verfuegbare_ebenen
+from data import WAHLEN, lade_ergebnisse, partei_farbe, verfuegbare_ebenen
 
 st.set_page_config(page_title="Wahlergebnisse Wuppertal", page_icon="🗳️", layout="wide")
 st.title("🗳️ Wahlergebnisse Wuppertal")
@@ -42,12 +42,20 @@ gesamt = gesamt.sort_values("Stimmen", ascending=False)
 
 titel = f"{wahlname} – {daten['Stimmart'].iloc[0]} – {gebiet}"
 
+palette = px.colors.qualitative.Prism
+farben = {}
+rest = (p for p in palette)
+for partei in gesamt["Partei"]:
+    farbe = partei_farbe(partei)
+    farben[partei] = farbe if farbe else next(rest)
+farben["Sonstige"] = "#9E9E9E"
+
 links, rechts = st.columns([2, 1])
 with links:
     fig = px.bar(
         gesamt.iloc[::-1], x="Stimmen", y="Partei", color="Partei", text="Anteil %",
         title=titel, labels={"Stimmen": "Stimmen"},
-        color_discrete_sequence=px.colors.qualitative.Prism,
+        color_discrete_map=farben,
     )
     fig.update_layout(showlegend=False, height=460)
     st.plotly_chart(fig, use_container_width=True)
@@ -62,7 +70,7 @@ with links:
     fig_torte = px.pie(
         torten_daten, names="Partei", values="Stimmen", hole=0.35,
         title=f"Stimmenanteile – {gebiet}",
-        color_discrete_sequence=px.colors.qualitative.Prism,
+        color_discrete_map=farben,
     )
     fig_torte.update_traces(textinfo="percent", textposition="inside")
     fig_torte.update_layout(height=460, legend_title_text="Partei")
