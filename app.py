@@ -1,20 +1,58 @@
-import streamlit as st
+import pandas as pd
 import plotly.express as px
+import streamlit as st
 
-from data import WAHLEN, lade_ergebnisse
+from data import WAHLEN, lade_ergebnisse, verfuegbare_ebenen
 
-st.title("Wahlergebnisse Wuppertal")
+st.set_page_config(page_title="Wahlergebnisse Wuppertal", page_icon="🗳️", layout="wide")
+st.title("🗳️ Wahlergebnisse Wuppertal")
+st.caption("Datenquelle: wahlen.wuppertal.de (Open Data) · Ergebnisse je Gebiet")
 
-wahl = st.selectbox("Wahl wählen", list(WAHLEN))
-df = lade_ergebnisse(WAHLEN[wahl])
 
-gebiet = st.selectbox("Gebiet", ["Alle"] + sorted(df["gebiet-name"].unique()))
-daten = df if gebiet == "Alle" else df[df["gebiet-name"] == gebiet]
+@st.cache_data(ttl=600, show_spinner="Lade Wahlergebnisse ...")
+def ergebnisse(wahl: str, ebene: str) -> pd.DataFrame:
+    return lade_ergebnisse(WAHLEN[wahl], ebene)
+
+
+wahl = st.selectbox("Wahl", list(WAHLEN))
+try:
+    ebenen = verfuegbare_ebenen(WAHLEN[wahl])
+except Exception:
+    st.error("Die Daten von wahlen.wuppertal.de konnten nicht geladen werden. Bitte später erneut versuchen.")
+    st.stop()
+
+ebene = st.radio("Ebene", list(ebenen), horizontal=True)
+df = ergebnisse(wahl, ebene)
+
+gebiete = ["Stadt gesamt"] + sorted(df["gebiet-name"].unique())
+gebiet = st.selectbox("Gebiet", gebiete)
+
+if gebiet == "Stadt gesamt":
+    daten = df
+else:
+    daten = df[df["gebiet-name"] == gebiet]
 
 gesamt = daten.groupby("Partei", as_index=False)["Stimmen"].sum()
 gesamt["Anteil %"] = (gesamt["Stimmen"] / gesamt["Stimmen"].sum() * 100).round(1)
+gesamt = gesamt.sort_values("Stimmen", ascending=False)
 
-fig = px.bar(gesamt.sort_values("Anteil %"), x="Anteil %", y="Partei",
-             text="Anteil %", title=f"{wahl} – {gebiet}")
-st.plotly_chart(fig, use_container_width=True)
-st.dataframe(gesamt, use_container_width=True, hide_index=True)
+stimmart = daten["Stimmart"].iloc[0]
+titel = f"{wahl} – {stimmart} – {gebiet}"
+
+links, rechts = st.columns([2, 1])
+with links:
+    fig = px.bar(
+        gesamt.iloc[::-1], x="Stimmen", y="Partei", color="Partei", text="Anteil %",
+        title=titel, labels={"Stimmen": "Stimmen"},
+        color_discrete_sequence=px.colors.qualitative.Prism,
+    )
+    fig.update_layout(showlegend=False, height=520)
+    st.plotly_chart(fig, use_container_width=True)
+with rechts:
+    st.metric("Gebiete in der Auswahl", daten["gebiet-name"].nunique())
+    st.metric("Parteien", len(gesamt))
+    st.metric("Stimmen insgesamt", f"{gesamt['Stimmen'].sum():,}".replace(",", "."))
+    st.dataframe(
+        gesamt[["Partei", "Stimmen", "Anteil %"]],
+        use_container_width=True, hide_index=True, height=420,
+    )
