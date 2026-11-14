@@ -49,8 +49,24 @@ with links:
         title=titel, labels={"Stimmen": "Stimmen"},
         color_discrete_sequence=px.colors.qualitative.Prism,
     )
-    fig.update_layout(showlegend=False, height=520)
+    fig.update_layout(showlegend=False, height=460)
     st.plotly_chart(fig, use_container_width=True)
+
+    kleine = gesamt[gesamt["Anteil %"] < 2]
+    torten_daten = gesamt[gesamt["Anteil %"] >= 2]
+    if len(kleine) > 0:
+        torten_daten = pd.concat(
+            [torten_daten, pd.DataFrame([{"Partei": "Sonstige", "Stimmen": kleine["Stimmen"].sum()}])],
+            ignore_index=True,
+        )
+    fig_torte = px.pie(
+        torten_daten, names="Partei", values="Stimmen", hole=0.35,
+        title=f"Stimmenanteile – {gebiet}",
+        color_discrete_sequence=px.colors.qualitative.Prism,
+    )
+    fig_torte.update_traces(textinfo="percent", textposition="inside")
+    fig_torte.update_layout(height=460, legend_title_text="Partei")
+    st.plotly_chart(fig_torte, use_container_width=True)
 with rechts:
     st.metric("Gebiete in der Auswahl", daten["gebiet-name"].nunique())
     st.metric("Parteien / Kandidaturen", len(gesamt))
