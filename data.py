@@ -1,10 +1,18 @@
 import io
+import json
+import time
+from pathlib import Path
 
 import pandas as pd
 import requests
 
 AGS = "05124000"
 BASIS = "https://wahlen.wuppertal.de/{wahlcode}/" + AGS + "/daten/opendata"
+
+# Statische Fallback-Kopien der Open-Data-Dateien: Wahlergebnisse sind
+# historisch unveraenderlich, daher kann das Dashboard bei Netzwerkproblemen
+# komplett offline aus dem Repo arbeiten.
+FALLBACK = Path(__file__).parent / "daten"
 
 EBENEN = {"Stadt gesamt": "Gemeinde", "Stadtbezirke": "Stadtbezirk",
           "Kommunalwahlbezirke": "Kommunalwahlbezirk", "Wahlbezirke": "Wahlbezirk"}
@@ -498,23 +506,47 @@ WAHLEN = {
 
 
 def _hole(url: str) -> requests.Response:
-    antwort = requests.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0 (Wahl-Dashboard)"})
-    antwort.raise_for_status()
-    return antwort
+    fehler: Exception | None = None
+    for versuch in range(3):
+        try:
+            antwort = requests.get(
+                url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (Wahl-Dashboard)"}
+            )
+            antwort.raise_for_status()
+            return antwort
+        except requests.RequestException as ausnahme:
+            fehler = ausnahme
+            if versuch < 2:
+                time.sleep(2 ** versuch)
+    raise fehler
 
 
 def verfuegbare_ebenen(wahl: dict) -> dict[str, str]:
-    open_data = _hole(f"{BASIS.format(wahlcode=wahl['wahlcode'])}/open_data.json").json()
+    basis = BASIS.format(wahlcode=wahl["wahlcode"])
+    try:
+        open_data = _hole(f"{basis}/open_data.json").json()
+    except (requests.RequestException, ValueError):
+        lokal = FALLBACK / wahl["wahlcode"] / "open_data.json"
+        if not lokal.exists():
+            raise
+        open_data = json.loads(lokal.read_text(encoding="utf-8"))
     urls = {}
     for eintrag in open_data.get("csvs", []):
         for label, muster in EBENEN.items():
             if eintrag["url"].endswith(f"-{wahl['slug']}-{muster}.csv"):
-                urls[label] = f"{BASIS.format(wahlcode=wahl['wahlcode'])}/{eintrag['url']}"
+                urls[label] = f"{basis}/{eintrag['url']}"
     return urls
 
 
 def lade_von_url(wahl: dict, url: str) -> pd.DataFrame:
-    csv_text = _hole(url).text
+    try:
+        csv_text = _hole(url).text
+    except requests.RequestException:
+        teile = url.split("/")
+        lokal = FALLBACK / teile[3] / teile[-1]
+        if not lokal.exists():
+            raise
+        csv_text = lokal.read_text(encoding="utf-8")
     df = pd.read_csv(io.StringIO(csv_text), sep=";", encoding="utf-8", dtype=str)
 
     spalten = [c for c in df.columns if c in wahl["parteien"]]
@@ -522,10 +554,24 @@ def lade_von_url(wahl: dict, url: str) -> pd.DataFrame:
         raise ValueError("Keine Parteien-Spalten in der CSV gefunden")
 
     df[spalten] = df[spalten].replace({"---": None, "": None}).fillna(0).astype(int)
-    stimmen = df[["gebiet-name"] + spalten].rename(columns=wahl["parteien"])
+    stimmen = df[["gebiet-name"] + spalten].rename(
+        columns={code: partei_kanonisch(name) for code, name in wahl["parteien"].items()}
+    )
     lang = stimmen.melt(id_vars="gebiet-name", var_name="Partei", value_name="Stimmen")
     lang["Stimmart"] = wahl["stimmentyp"]
     return lang[lang["Stimmen"] > 0]
+
+
+_KANONISCH = {
+    "die linke": "Die Linke",
+    "die grauen": "Die Grauen",
+}
+
+
+def partei_kanonisch(name: str) -> str:
+    """Vereinheitlicht Schreibvarianten (z. B. 'DIE LINKE' vs. 'Die Linke'),
+    damit der Wahlvergleich Parteien ueber Jahre hinweg korrekt zusammenfuehrt."""
+    return _KANONISCH.get(name.strip().lower(), name)
 
 
 def lade_ergebnisse(wahl: dict, ebene: str = "Wahlbezirke") -> pd.DataFrame:
