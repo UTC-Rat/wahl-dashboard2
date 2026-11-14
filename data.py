@@ -513,11 +513,8 @@ def verfuegbare_ebenen(wahl: dict) -> dict[str, str]:
     return urls
 
 
-def lade_ergebnisse(wahl: dict, ebene: str = "Wahlbezirke") -> pd.DataFrame:
-    urls = verfuegbare_ebenen(wahl)
-    if ebene not in urls:
-        raise ValueError(f"Ebene '{ebene}' nicht verfuegbar: {list(urls)}")
-    csv_text = _hole(urls[ebene]).text
+def lade_von_url(wahl: dict, url: str) -> pd.DataFrame:
+    csv_text = _hole(url).text
     df = pd.read_csv(io.StringIO(csv_text), sep=";", encoding="utf-8", dtype=str)
 
     spalten = [c for c in df.columns if c in wahl["parteien"]]
@@ -529,6 +526,41 @@ def lade_ergebnisse(wahl: dict, ebene: str = "Wahlbezirke") -> pd.DataFrame:
     lang = stimmen.melt(id_vars="gebiet-name", var_name="Partei", value_name="Stimmen")
     lang["Stimmart"] = wahl["stimmentyp"]
     return lang[lang["Stimmen"] > 0]
+
+
+def lade_ergebnisse(wahl: dict, ebene: str = "Wahlbezirke") -> pd.DataFrame:
+    urls = verfuegbare_ebenen(wahl)
+    if ebene not in urls:
+        raise ValueError(f"Ebene '{ebene}' nicht verfuegbar: {list(urls)}")
+    return lade_von_url(wahl, urls[ebene])
+
+
+VERGLEICHS_EBENEN = ["Stadt gesamt", "Stadtbezirke", "Kommunalwahlbezirke", "Stimmbezirke"]
+
+
+def vergleich_url(wahl: dict, level: str) -> str | None:
+    """Aufloesung der Vergleichs-Ebene je Wahl.
+
+    Rats-/OB-/Integrationsratsarchive nennen ihre 33 Kommunalwahlbezirke
+    'Wahlbezirke'; Bundestags-/Europawahlen haben dort 255 Stimmbezirke.
+    """
+    urls = verfuegbare_ebenen(wahl)
+    kommunal_archiv = wahl["wahlcode"].lower().startswith(("kw", "ir", "ob"))
+    if level == "Stadt gesamt":
+        return urls.get("Stadt gesamt")
+    if level == "Stadtbezirke":
+        return urls.get("Stadtbezirke")
+    if level == "Kommunalwahlbezirke":
+        if "Kommunalwahlbezirke" in urls:
+            return urls["Kommunalwahlbezirke"]
+        if kommunal_archiv and "Wahlbezirke" in urls:
+            return urls["Wahlbezirke"]
+        return None
+    if level == "Stimmbezirke":
+        if not kommunal_archiv and "Wahlbezirke" in urls:
+            return urls["Wahlbezirke"]
+        return None
+    return None
 
 # Uebliche Parteifarben (medienuebliche Kanonisierung)
 PARTEI_FARBEN = {
