@@ -10,6 +10,7 @@ from data import (
     lade_ergebnisse,
     lade_von_url,
     partei_farbe,
+    verfuegbare_ebenen,
     vergleich_url,
 )
 
