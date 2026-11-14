@@ -70,7 +70,7 @@ with links:
     fig_torte = px.pie(
         torten_daten, names="Partei", values="Stimmen", hole=0.35,
         title=f"Stimmenanteile – {gebiet}",
-        color_discrete_map=farben,
+        color="Partei", color_discrete_map=farben,
     )
     fig_torte.update_traces(textinfo="percent", textposition="inside")
     fig_torte.update_layout(height=460, legend_title_text="Partei")
