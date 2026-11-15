@@ -15,7 +15,8 @@ BASIS = "https://wahlen.wuppertal.de/{wahlcode}/" + AGS + "/daten/opendata"
 FALLBACK = Path(__file__).parent / "daten"
 
 EBENEN = {"Stadt gesamt": "Gemeinde", "Stadtbezirke": "Stadtbezirk",
-          "Kommunalwahlbezirke": "Kommunalwahlbezirk", "Wahlbezirke": "Wahlbezirk"}
+          "Kommunalwahlbezirke": "Kommunalwahlbezirk", "Wahlbezirke": "Wahlbezirk",
+          "Stimmbezirke": "Stimmbezirk"}
 
 # Alle Parteien-Zuordnungen wurden gegen die amtlichen Endergebnisse
 # (Gemeinde-Summen der CSVs vs. Praesentations-JSONs) verifiziert.
@@ -397,48 +398,134 @@ WAHLEN = {
         "D31": "RENTNER"
 },
     },
-    "Integrationsratswahl 2025": {
-        "wahlcode": "IR2025",
-        "slug": "Integrationsratswahl",
-        "stimmentyp": "Stimmen",
+    "Landtagswahl 2022": {
+        "wahlcode": "lw2022",
+        "slug": "Landtagswahl",
+        "stimmentyp": "Zweitstimmen",
         "parteien": {
-        "D1": "SPD",
-        "D2": "CDU",
-        "D3": "Die Linke",
-        "D4": "GRÜNE",
-        "D5": "POC",
-        "D6": "WfW/FW",
-        "D7": "AfD",
-        "D8": "BSW"
+        "F1": "CDU",
+        "F2": "SPD",
+        "F3": "FDP",
+        "F4": "AfD",
+        "F5": "GRÜNE",
+        "F6": "Die Linke",
+        "F7": "PIRATEN",
+        "F8": "Die PARTEI",
+        "F9": "FREIE WÄHLER",
+        "F10": "BIG",
+        "F11": "ÖDP",
+        "F12": "Volksabstimmung",
+        "F13": "MLPD",
+        "F14": "DIE VIOLETTEN",
+        "F15": "Gesundheitsforschung",
+        "F16": "ZENTRUM",
+        "F17": "DKP",
+        "F18": "dieBasis",
+        "F19": "DSP",
+        "F20": "Die Urbane.",
+        "F21": "LIEBE",
+        "F22": "FAMILIE",
+        "F23": "neo",
+        "F24": "Die Humanisten",
+        "F25": "PdF",
+        "F26": "LfK",
+        "F27": "Tierschutzpartei",
+        "F28": "Team Todenhöfer",
+        "F29": "Volt"
 },
     },
-    "Integrationsratswahl 2020": {
-        "wahlcode": "IR2020",
-        "slug": "Integrationsratswahl",
-        "stimmentyp": "Stimmen",
+    "Landtagswahl 2017": {
+        "wahlcode": "lw2017",
+        "slug": "Landtagswahl",
+        "stimmentyp": "Zweitstimmen",
         "parteien": {
-        "D1": "SPD",
-        "D2": "CDU Europaliste",
-        "D3": "DIE LINKE",
-        "D4": "GRÜNE",
-        "D5": "LAW",
-        "D6": "Othmani, Jamel",
-        "D7": "POC",
-        "D8": "WfW/FW"
+        "F1": "SPD",
+        "F2": "CDU",
+        "F3": "GRÜNE",
+        "F4": "FDP",
+        "F5": "PIRATEN",
+        "F6": "Die Linke",
+        "F7": "NPD",
+        "F8": "Die PARTEI",
+        "F9": "FREIE WÄHLER",
+        "F10": "BIG",
+        "F11": "FBI/FWG",
+        "F12": "ÖDP",
+        "F13": "Volksabstimmung",
+        "F14": "Tierschutzpartei",
+        "F15": "Allianz Deutscher Demokraten",
+        "F16": "AfD",
+        "F17": "AUFBRUCH C",
+        "F18": "BGE",
+        "F19": "DBD",
+        "F20": "DKP",
+        "F21": "ZENTRUM",
+        "F22": "DIE RECHTE",
+        "F23": "REP",
+        "F24": "DIE VIOLETTEN",
+        "F25": "JED",
+        "F26": "MLPD",
+        "F27": "PAN",
+        "F28": "Gesundheitsforschung",
+        "F29": "PARTEILOSE WG „BRD“",
+        "F30": "Schöner Leben",
+        "F31": "V-Partei³"
 },
     },
-    "Integrationsratswahl 2014": {
-        "wahlcode": "IR2014",
-        "slug": "Integrationsratswahl",
-        "stimmentyp": "Stimmen",
+    "Landtagswahl 2012": {
+        "wahlcode": "lw2012",
+        "slug": "Landtagswahl",
+        "stimmentyp": "Zweitstimmen",
         "parteien": {
-        "D1": "CDU Europaliste",
-        "D2": "Osteuropäische Liste",
-        "D3": "DIE LINKE - International Wuppertal",
-        "D4": "ZiW",
-        "D5": "Lista Italiana",
-        "D6": "GfW",
-        "D7": "SPD International"
+        "F1": "CDU",
+        "F2": "SPD",
+        "F3": "GRÜNE",
+        "F4": "FDP",
+        "F5": "Die Linke",
+        "F6": "PIRATEN",
+        "F7": "PRO NRW",
+        "F8": "NPD",
+        "F9": "Tierschutzpartei",
+        "F10": "FAMILIE",
+        "F11": "BIG",
+        "F12": "Die PARTEI",
+        "F13": "ÖDP",
+        "F14": "FBI/Freie Wähler",
+        "F15": "AUF",
+        "F16": "FREIE WÄHLER",
+        "F17": "PARTEI DER VERNUNFT"
+},
+    },
+    "Landtagswahl 2010": {
+        "wahlcode": "lw2010",
+        "slug": "Landtagswahl",
+        "stimmentyp": "Zweitstimmen",
+        "parteien": {
+        "F1": "CDU",
+        "F2": "SPD",
+        "F3": "GRÜNE",
+        "F4": "FDP",
+        "F5": "NPD",
+        "F6": "Die Linke",
+        "F7": "REP",
+        "F8": "ÖDP",
+        "F9": "BüSo",
+        "F10": "PBC",
+        "F11": "Tierschutzpartei",
+        "F12": "FAMILIE",
+        "F13": "Die PARTEI",
+        "F14": "ZENTRUM",
+        "F15": "BGD",
+        "F16": "AUF",
+        "F17": "PIRATEN",
+        "F18": "ddp",
+        "F19": "Freie Union",
+        "F20": "RENTNER",
+        "F21": "PRO NRW",
+        "F22": "DIE VIOLETTEN",
+        "F23": "BIG",
+        "F24": "Volksabstimmung",
+        "F25": "FBI/Freie Wähler"
 },
     },
     "Oberbürgermeisterwahl 2020": {
@@ -587,11 +674,12 @@ VERGLEICHS_EBENEN = ["Stadt gesamt", "Stadtbezirke", "Kommunalwahlbezirke", "Sti
 def vergleich_url(wahl: dict, level: str) -> str | None:
     """Aufloesung der Vergleichs-Ebene je Wahl.
 
-    Rats-/OB-/Integrationsratsarchive nennen ihre 33 Kommunalwahlbezirke
-    'Wahlbezirke'; Bundestags-/Europawahlen haben dort 255 Stimmbezirke.
+    Rats-/OB-Archive nennen ihre 33 Kommunalwahlbezirke 'Wahlbezirke';
+    Bundestags-/Europawahlen haben dort 255 Stimmbezirke. Landtagsarchive
+    liefern Kommunalwahlbezirke und Stimmbezirke direkt.
     """
     urls = verfuegbare_ebenen(wahl)
-    kommunal_archiv = wahl["wahlcode"].lower().startswith(("kw", "ir", "ob"))
+    kommunal_archiv = wahl["wahlcode"].lower().startswith(("kw", "ob"))
     if level == "Stadt gesamt":
         return urls.get("Stadt gesamt")
     if level == "Stadtbezirke":
@@ -603,6 +691,8 @@ def vergleich_url(wahl: dict, level: str) -> str | None:
             return urls["Wahlbezirke"]
         return None
     if level == "Stimmbezirke":
+        if "Stimmbezirke" in urls:
+            return urls["Stimmbezirke"]
         if not kommunal_archiv and "Wahlbezirke" in urls:
             return urls["Wahlbezirke"]
         return None

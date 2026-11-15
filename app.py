@@ -17,7 +17,7 @@ from referenz import REFERENZEN, REFERENZ_LABELS, REFERENZ_TYPEN, WAHL_REFERENZ,
 
 st.set_page_config(page_title="Wahlergebnisse Wuppertal", page_icon="🗳️", layout="wide")
 st.title("🗳️ Wahlergebnisse Wuppertal")
-st.caption("Datenquelle: wahlen.wuppertal.de (Open Data) · Bundestags-, Rats-, Europa-, Integrationsrats- und Oberbürgermeisterwahlen")
+st.caption("Datenquelle: wahlen.wuppertal.de (Open Data) · Bundestags-, Landtags-, Rats-, Europa- und Oberbürgermeisterwahlen")
 
 
 @st.cache_data(ttl=86400, show_spinner="Lade Wahlergebnisse ...")
@@ -325,6 +325,6 @@ else:
     st.caption(
         "Referenzdaten: Bundestags-/Europawahlen bundesweit (Der Bundeswahlleiter) und "
         "Landtagswahlen NRW (Landeswahlleiterin), jeweils Zweitstimmenanteile; "
-        "CDU und CSU zusammengefasst. Kommunalwahlen werden mit der zeitlich nächsten "
-        "überregionalen Wahl verglichen."
+        "CDU und CSU zusammengefasst. Landtagswahlen werden mit ihrem NRW-Landesergebnis "
+        "verglichen, Kommunalwahlen mit der zeitlich nächsten überregionalen Wahl."
     )
