@@ -262,7 +262,7 @@ elif modus == "Bezirksübersicht":
         aktuelle = [w for w in wahl_typen if w.startswith(praefix)]
         if aktuelle:
             standard.append(max(aktuelle, key=jahr))
-    auswahl = st.multiselect("Wahlen (Zeilen, mehrfach auswählbar)", wahl_typen, default=standard)
+    auswahl = st.multiselect("Wahlen (Spalten, mehrfach auswählbar)", wahl_typen, default=standard)
     ebene = st.radio("Bezirksebene", ["Kommunalwahlbezirke", "Stadtbezirke"], horizontal=True)
 
     if not auswahl:
@@ -298,27 +298,30 @@ elif modus == "Bezirksübersicht":
     alle_parteien = sorted({p for t in top3.values() for p in t["Partei"]})
     farben = farben_fuer(alle_parteien)
 
+    spalten_wahlen = [w for w in sortierte_wahlen if w in top3]
     kopf = "".join(
-        f'<th style="border:1px solid #ddd;padding:3px 6px;background:#f5f5f5">{b}</th>'
-        for b in bezirke
+        f'<th style="border:1px solid #ddd;padding:4px 8px;background:#f5f5f5;'
+        f'color:#111;white-space:nowrap">{w}</th>'
+        for w in spalten_wahlen
     )
+    gruppen_je_wahl = {w: top3[w].groupby("gebiet-name") for w in spalten_wahlen}
     zeilen_html = []
-    for wahlname in sortierte_wahlen:
-        if wahlname not in top3:
-            continue
-        gruppen = top3[wahlname].groupby("gebiet-name")
+    for bezirk in bezirke:
         zellen = [
-            _zelle_html(gruppen.get_group(b) if b in gruppen.groups else None, farben)
-            for b in bezirke
+            _zelle_html(
+                gruppen_je_wahl[w].get_group(bezirk) if bezirk in gruppen_je_wahl[w].groups else None,
+                farben,
+            )
+            for w in spalten_wahlen
         ]
         zeilen_html.append(
-            '<tr><th style="border:1px solid #ddd;padding:3px 6px;background:#f5f5f5;'
-            f'white-space:nowrap">{wahlname}</th>{"".join(zellen)}</tr>'
+            '<tr><th style="border:1px solid #ddd;padding:4px 8px;background:#f5f5f5;'
+            f'color:#111;text-align:left;white-space:nowrap">{bezirk}</th>{"".join(zellen)}</tr>'
         )
 
     html = (
         '<div style="overflow-x:auto"><table style="border-collapse:collapse;'
-        'font-family:sans-serif;font-size:12px">'
+        'font-family:sans-serif;font-size:12px;color:#111">'
         f'<tr><th style="border:1px solid #ddd;background:#f5f5f5"></th>{kopf}</tr>'
         f'{"".join(zeilen_html)}</table></div>'
     )
