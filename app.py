@@ -1,3 +1,4 @@
+import itertools
 import re
 
 import pandas as pd
@@ -39,8 +40,7 @@ def vergleichsdaten(wahlname: str, level: str) -> pd.DataFrame | None:
 
 
 def farben_fuer(parteien: list[str]) -> dict[str, str]:
-    palette = px.colors.qualitative.Prism
-    rest = (p for p in palette)
+    rest = itertools.cycle(px.colors.qualitative.Prism)
     zuordnung = {}
     for partei in parteien:
         farbe = partei_farbe(partei)
