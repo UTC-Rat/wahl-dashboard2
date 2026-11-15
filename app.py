@@ -54,7 +54,35 @@ def jahr(name: str) -> int:
     return int(treffer.group(1)) if treffer else 0
 
 
-modus = st.radio("Ansicht", ["Einzelwahl", "Wahlvergleich", "Überregional"], horizontal=True)
+def _text_farbe(hex_farbe: str) -> str:
+    r, g, b = (int(hex_farbe[i:i + 2], 16) for i in (1, 3, 5))
+    return "#000000" if 0.299 * r + 0.587 * g + 0.114 * b > 150 else "#FFFFFF"
+
+
+def _prozent(wert: float) -> str:
+    return f"{wert:.1f}".replace(".", ",")
+
+
+def _zelle_html(drei: pd.DataFrame, farben: dict[str, str]) -> str:
+    if drei is None or drei.empty:
+        return '<td style="border:1px solid #ddd;background:#fafafa"></td>'
+    erster_anteil = drei.iloc[0]["Anteil %"]
+    felder = []
+    for rang, (_, z) in enumerate(drei.iterrows()):
+        farbe = farben.get(z["Partei"], "#9E9E9E")
+        if rang == 0:
+            label = f"{z['Partei']}&nbsp;{_prozent(z['Anteil %'])}&nbsp;%"
+        else:
+            abstand = erster_anteil - z["Anteil %"]
+            label = f"{z['Partei']}&nbsp;−{_prozent(abstand)}"
+        felder.append(
+            f'<div style="background:{farbe};color:{_text_farbe(farbe)};'
+            f'padding:2px 5px;white-space:nowrap">{label}</div>'
+        )
+    return '<td style="border:1px solid #ddd;padding:1px;vertical-align:top">' + "".join(felder) + "</td>"
+
+
+modus = st.radio("Ansicht", ["Einzelwahl", "Wahlvergleich", "Überregional", "Bezirksübersicht"], horizontal=True)
 
 if modus == "Einzelwahl":
     wahlname = st.selectbox("Wahl", list(WAHLEN))
@@ -220,6 +248,81 @@ elif modus == "Wahlvergleich":
         ]
     formatiert.index.name = "Partei"
     st.dataframe(formatiert, use_container_width=True, height=420)
+
+elif modus == "Bezirksübersicht":
+    st.subheader("Bezirksübersicht")
+    st.caption(
+        "Je Bezirk und Wahl die drei stärksten Parteien – oberstes Feld: stärkste Partei "
+        "mit Anteil in %, darunter zweit- und drittstärkste Partei mit Abstand in Prozentpunkten (−pp)"
+    )
+
+    wahl_typen = [w for w in WAHLEN if not w.startswith(("Oberbürgermeister", "OB-"))]
+    standard = []
+    for praefix in ["Ratswahl", "Landtagswahl", "Bundestagswahl", "Europawahl"]:
+        aktuelle = [w for w in wahl_typen if w.startswith(praefix)]
+        if aktuelle:
+            standard.append(max(aktuelle, key=jahr))
+    auswahl = st.multiselect("Wahlen (Zeilen, mehrfach auswählbar)", wahl_typen, default=standard)
+    ebene = st.radio("Bezirksebene", ["Kommunalwahlbezirke", "Stadtbezirke"], horizontal=True)
+
+    if not auswahl:
+        st.info("Bitte mindestens eine Wahl auswählen.")
+        st.stop()
+
+    sortierte_wahlen = sorted(auswahl, key=lambda w: (jahr(w), w))
+
+    top3: dict[str, pd.DataFrame] = {}
+    fehlend: list[str] = []
+    for wahlname in sortierte_wahlen:
+        df = vergleichsdaten(wahlname, ebene)
+        if df is None:
+            fehlend.append(wahlname)
+            continue
+        gesamt = df.groupby(["gebiet-name", "Partei"], as_index=False)["Stimmen"].sum()
+        gesamt["Anteil %"] = (
+            gesamt["Stimmen"] / gesamt.groupby("gebiet-name")["Stimmen"].transform("sum") * 100
+        )
+        top3[wahlname] = (
+            gesamt.sort_values(["gebiet-name", "Stimmen"], ascending=[True, False])
+            .groupby("gebiet-name", sort=False)
+            .head(3)
+        )
+
+    if fehlend:
+        st.warning(f"Für die Ebene „{ebene}“ keine Daten verfügbar: {', '.join(fehlend)}")
+    if not top3:
+        st.info("Für diese Kombination aus Wahlen und Ebene liegen keine Daten vor.")
+        st.stop()
+
+    bezirke = sorted(set().union(*[set(t["gebiet-name"]) for t in top3.values()]))
+    alle_parteien = sorted({p for t in top3.values() for p in t["Partei"]})
+    farben = farben_fuer(alle_parteien)
+
+    kopf = "".join(
+        f'<th style="border:1px solid #ddd;padding:3px 6px;background:#f5f5f5">{b}</th>'
+        for b in bezirke
+    )
+    zeilen_html = []
+    for wahlname in sortierte_wahlen:
+        if wahlname not in top3:
+            continue
+        gruppen = top3[wahlname].groupby("gebiet-name")
+        zellen = [
+            _zelle_html(gruppen.get_group(b) if b in gruppen.groups else None, farben)
+            for b in bezirke
+        ]
+        zeilen_html.append(
+            '<tr><th style="border:1px solid #ddd;padding:3px 6px;background:#f5f5f5;'
+            f'white-space:nowrap">{wahlname}</th>{"".join(zellen)}</tr>'
+        )
+
+    html = (
+        '<div style="overflow-x:auto"><table style="border-collapse:collapse;'
+        'font-family:sans-serif;font-size:12px">'
+        f'<tr><th style="border:1px solid #ddd;background:#f5f5f5"></th>{kopf}</tr>'
+        f'{"".join(zeilen_html)}</table></div>'
+    )
+    st.markdown(html, unsafe_allow_html=True)
 
 else:
     st.subheader("Überregionaler Vergleich")
