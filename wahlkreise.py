@@ -47,12 +47,28 @@ WAHLKREISE = {
     },
 }
 
-WAHLKREIS_WAHLEN = [
-    "Landtagswahl 2022", "Landtagswahl 2017",
-    "Bundestagswahl 2025", "Bundestagswahl 2021",
-    "Ratswahl 2025", "Ratswahl 2020",
-    "Europawahl 2024", "Europawahl 2019",
-]
+_TYP_REIHENFOLGE = ["Landtagswahl", "Bundestagswahl", "Ratswahl", "Europawahl"]
+
+
+def _sortierschluessel(wahlname: str) -> tuple[int, int]:
+    """Wahlen nach Typ (LT, BT, Rat, Europa) und Jahr absteigend sortieren."""
+    for idx, praefix in enumerate(_TYP_REIHENFOLGE):
+        if wahlname.startswith(praefix):
+            jahr = int(wahlname.rsplit(" ", 1)[-1])
+            return (idx, -jahr)
+    return (9, -int(wahlname.rsplit(" ", 1)[-1]))
+
+
+# Alle im Dashboard hinterlegten Bundestags-, Rats-, Europa- und
+# Landtagswahlen (Oberbürgermeister-/Stichwahlen ausgeschlossen).
+WAHLKREIS_WAHLEN = sorted(
+    [
+        w
+        for w in WAHLEN
+        if not w.startswith(("Oberbürgermeisterwahl", "OB-Stichwahl"))
+    ],
+    key=_sortierschluessel,
+)
 
 
 def _lade_bezirksebene(wahlname: str) -> pd.DataFrame:
