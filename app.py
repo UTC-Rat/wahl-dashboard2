@@ -345,7 +345,8 @@ elif modus == "Landtagswahlkreis 2027":
         st.markdown(info["beschreibung"])
 
     @st.cache_data(ttl=86400, show_spinner="Lade Wahlkreisdaten ...")
-    def wk_ergebnisse(wahlname: str) -> pd.DataFrame:
+    def wk_ergebnisse(wahlname: str, _logik_version: int = 3) -> pd.DataFrame:
+        # _logik_version busts den Cache bei Änderungen an der Aggregationslogik
         return lade_wahlkreis_ergebnisse(wahlname)
 
     verfuegbar = [w for w in WAHLKREIS_WAHLEN if w in WAHLEN]
@@ -367,16 +368,20 @@ elif modus == "Landtagswahlkreis 2027":
         except Exception as e:
             st.warning(f"Daten für {wahlname} konnten nicht geladen werden: {type(e).__name__}: {e}")
             continue
-        zeilen.append(df_wk[df_wk["Wahlkreis"] == wahlkreis])
+        df_sel = df_wk[df_wk["Wahlkreis"] == wahlkreis]
+        if len(df_sel) > 0:
+            zeilen.append(df_sel)
 
     if not zeilen:
         st.warning(
-            "Für die ausgewählten Wahlen liegen keine Daten vor - für den "
-            "Wahlkreis 34 (Wuppertal III - Solingen II) sind derzeit nur "
-            "Landtagswahl 2022, Bundestagswahl 2025 und Europawahl 2024 verfügbar."
+            "Für diese Auswahl liegen keine Daten vor. Hinweis: Für den Wahlkreis 34 "
+            "(Wuppertal III - Solingen II) sind derzeit nur Landtagswahl 2022, "
+            "Bundestagswahl 2025 und Europawahl 2024 verfügbar (Solingen-Daten via "
+            "wahlen.kdvz.nrw); für andere Wahlen fehlt dort eine gesicherte "
+            "Bezirks-Quelle. Prüfe auch die Hinweise zu den einzelnen Wahlen oben."
         )
         st.stop()
-    daten = pd.concat([z for z in zeilen if len(z) > 0], ignore_index=True)
+    daten = pd.concat(zeilen, ignore_index=True)
     if daten.empty:
         st.info("Für diese Auswahl liegen keine Daten vor.")
         st.stop()

@@ -286,7 +286,7 @@ def lade_wahlkreis_ergebnisse(wahlname: str) -> pd.DataFrame:
     ergebnis = pd.concat(teile, ignore_index=True)
 
     kontrolle = _KONTROLLE_WK34.get(WAHLEN[wahlname]["wahlcode"])
-    if kontrolle:
+    if kontrolle and ergebnis["Wahlkreis"].str.contains("Wahlkreis 34").any():
         wk34 = ergebnis[ergebnis["Wahlkreis"].str.contains("Wahlkreis 34")]
         # Toleranz: der nicht abtrennbare Stimmbezirk 123 (KWB 12) verursacht
         # eine kleine planmaessige Abweichung; Zeilenvertauschungen (Tausende
