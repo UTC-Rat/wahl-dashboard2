@@ -211,9 +211,19 @@ def _kalibriere_zuordnung(summen: dict[str, int], refs: list[tuple[str, float]],
                 if abs(anteil - wert) <= 0.2:
                     kandidaten.append(spalte)
         if len(kandidaten) != 1:
+            if gesamt is None:
+                diagnose = " | ".join(
+                    f"{spalte}={st}" for spalte, st in sorted(summen.items())
+                )
+            else:
+                diagnose = " | ".join(
+                    f"{spalte}={st} ({st / gesamt * 100:.2f} %)"
+                    for spalte, st in sorted(summen.items())
+                )
             raise ValueError(
                 f"Spaltenkalibrierung fehlgeschlagen für {partei} "
-                f"({len(kandidaten)} Kandidaten: {kandidaten})"
+                f"({len(kandidaten)} Kandidaten: {kandidaten}); gesamt={gesamt}; "
+                f"Spalten: {diagnose}"
             )
         zuordnung[kandidaten[0]] = partei
         belegt.add(kandidaten[0])
@@ -259,18 +269,42 @@ def _lade_solingen(wahlname: str) -> pd.DataFrame:
         df_stimmen = df[spalten].replace({"---": "0", "": "0"}).fillna("0").astype(int)
         gesamt = None
     else:
-        spalten = [c for c in df.columns if re.fullmatch(r"[DF][0-9]+", c)]
-        if not spalten:
-            raise ValueError(f"Keine Stimmen-Spalten für {wahlname} gefunden")
-        df_stimmen = df[spalten].replace({"---": "0", "": "0"}).fillna("0").astype(int)
-        summen = {Spalte: int(df_stimmen[Spalte].sum()) for Spalte in spalten}
-        gesamt = sum(summen.values())
-        if gesamt <= 0:
-            raise ValueError(f"Solingen-CSV für {wahlname} ohne Stimmen")
-        zuordnung = _kalibriere_zuordnung(
-            summen, _SOLINGEN_REF[wahl["wahlcode"]], gesamt
-        )
-        spalten = list(zuordnung)
+        df.columns = [str(c).strip() for c in df.columns]
+        alle = [c for c in df.columns if re.fullmatch(r"[DF][0-9]+", c)]
+        if not alle:
+            raise ValueError(
+                f"Keine Stimmen-Spalten für {wahlname} gefunden "
+                f"(Kopfzeile: {list(df.columns)})"
+            )
+        # Je Wahl ist nur ein Stimmentyp relevant (Zweitstimmen F bzw.
+        # Erststimmen D). Es wird nacheinander F, D und alles probiert;
+        # unpassende Spalten (Erst- statt Zweitstimmen) verfaelschen sonst
+        # das Referenz-Matching.
+        erfolg = None
+        diag = ""
+        for praefix in ("F", "D", ""):
+            cand = [c for c in alle if praefix == "" or c.startswith(praefix)]
+            if not cand:
+                continue
+            cand_df = df[cand].replace({"---": "0", "": "0"}).fillna("0").astype(int)
+            summen = {Spalte: int(cand_df[Spalte].sum()) for Spalte in cand}
+            gesamt_c = sum(summen.values())
+            if gesamt_c <= 0:
+                continue
+            try:
+                zu = _kalibriere_zuordnung(
+                    summen, _SOLINGEN_REF[wahl["wahlcode"]], gesamt_c
+                )
+                erfolg = (zu, cand_df, cand)
+                break
+            except ValueError as exc:
+                diag = str(exc)
+        if erfolg is None:
+            raise ValueError(
+                f"Solingen-Kalibrierung für {wahlname} in allen "
+                f"Stimmentyp-Varianten fehlgeschlagen. Letzter Versuch: {diag}"
+            )
+        zuordnung, df_stimmen, spalten = erfolg
 
     for Spalte in spalten:
         if int(df_stimmen[Spalte].sum()) <= 0:
@@ -311,10 +345,9 @@ def lade_wahlkreis_ergebnisse(wahlname: str) -> pd.DataFrame:
         zug = lang[lang["gebiet-nr"].isin(info["nummern"])]
         if info.get("solingen_nummern"):
             if sol_lang is None:
-                raise ValueError(
-                    f"Solingen-Daten für {wahlname} nicht verfügbar - "
-                    "Wahlkreis 34 wird für diese Wahl übersprungen"
-                )
+                # Wahlkreis 34 ohne Solingen nicht darstellbar, aber die
+                # Wuppertaler Wahlkreise I/II bleiben verfügbar.
+                continue
             zug_so = sol_lang[sol_lang["gebiet-nr"].isin(info["solingen_nummern"])]
             zug_so = zug_so.groupby("Partei", as_index=False)["Stimmen"].sum()
             zug = pd.concat([zug, zug_so], ignore_index=True)

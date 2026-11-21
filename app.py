@@ -345,7 +345,7 @@ elif modus == "Landtagswahlkreis 2027":
         st.markdown(info["beschreibung"])
 
     @st.cache_data(ttl=86400, show_spinner="Lade Wahlkreisdaten ...")
-    def wk_ergebnisse(wahlname: str, _logik_version: int = 4) -> pd.DataFrame:
+    def wk_ergebnisse(wahlname: str, _logik_version: int = 5) -> pd.DataFrame:
         # _logik_version busts den Cache bei Änderungen an der Aggregationslogik
         return lade_wahlkreis_ergebnisse(wahlname)
 
