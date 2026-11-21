@@ -203,13 +203,14 @@ def _kalibriere_zuordnung(summen: dict[str, int], refs: list[tuple[str, float]],
         for spalte, st in summen.items():
             if spalte in belegt:
                 continue
-            if gesamt is None:
-                if abs(st - wert) <= 5:
-                    kandidaten.append(spalte)
-            else:
+            # Referenzwert kann absolut (Stimmen) oder in Prozent sein;
+            # beides pruefen, damit beide Faelle funktionieren.
+            passt = abs(st - wert) <= 5
+            if not passt and gesamt:
                 anteil = st / gesamt * 100
-                if abs(anteil - wert) <= 0.2:
-                    kandidaten.append(spalte)
+                passt = abs(anteil - wert) <= 0.5
+            if passt:
+                kandidaten.append(spalte)
         if len(kandidaten) != 1:
             if gesamt is None:
                 diagnose = " | ".join(
