@@ -15,6 +15,7 @@ from data import (
     vergleich_url,
 )
 from referenz import REFERENZEN, REFERENZ_LABELS, REFERENZ_TYPEN, WAHL_REFERENZ, referenz_schluessel
+from wahlkreise import WAHLKREISE, WAHLKREIS_WAHLEN, lade_wahlkreis_ergebnisse
 
 st.set_page_config(page_title="Wahlergebnisse Wuppertal", page_icon="🗳️", layout="wide")
 st.title("🗳️ Wahlergebnisse Wuppertal")
@@ -82,7 +83,7 @@ def _zelle_html(drei: pd.DataFrame, farben: dict[str, str]) -> str:
     return '<td style="border:1px solid #ddd;padding:1px;vertical-align:top">' + "".join(felder) + "</td>"
 
 
-modus = st.radio("Ansicht", ["Einzelwahl", "Wahlvergleich", "Überregional", "Bezirksübersicht"], horizontal=True)
+modus = st.radio("Ansicht", ["Einzelwahl", "Wahlvergleich", "Überregional", "Bezirksübersicht", "Landtagswahlkreis 2027"], horizontal=True)
 
 if modus == "Einzelwahl":
     wahlname = st.selectbox("Wahl", list(WAHLEN))
@@ -327,7 +328,107 @@ elif modus == "Bezirksübersicht":
     )
     st.markdown(html, unsafe_allow_html=True)
 
+
+elif modus == "Landtagswahlkreis 2027":
+    st.subheader("Landtagswahlkreis 2027")
+    st.caption(
+        "Stimmen der letzten Wahlen, aggregiert auf die Landtagswahlkreise "
+        "Wuppertal I (Wahlkreis 32) und Wuppertal II (Wahlkreis 33) - Zuschnitt zur "
+        "Landtagswahl am 25.04.2027 (identisch zu 2022). Die Aggregation über die "
+        "Kommunalwahlbezirke wurde für die Landtagswahl 2022 exakt gegen die amtlichen "
+        "Wahlkreis-Ergebnisse des Wahlleiters NRW verifiziert."
+    )
+
+    wahlkreis = st.radio("Landtagswahlkreis", list(WAHLKREISE), horizontal=True)
+    info = WAHLKREISE[wahlkreis]
+    with st.expander("Zusammensetzung des Wahlkreises (amtlich)"):
+        st.markdown(info["beschreibung"])
+
+    @st.cache_data(ttl=86400, show_spinner="Lade Wahlkreisdaten ...")
+    def wk_ergebnisse(wahlname: str) -> pd.DataFrame:
+        return lade_wahlkreis_ergebnisse(wahlname)
+
+    verfuegbar = [w for w in WAHLKREIS_WAHLEN if w in WAHLEN]
+    standard: list[str] = []
+    for praefix in ["Landtagswahl", "Bundestagswahl", "Ratswahl", "Europawahl"]:
+        aktuelle = [w for w in verfuegbar if w.startswith(praefix)]
+        if aktuelle:
+            standard.append(max(aktuelle, key=jahr))
+    auswahl = st.multiselect("Wahlen", verfuegbar, default=standard)
+
+    if not auswahl:
+        st.info("Bitte mindestens eine Wahl auswählen.")
+        st.stop()
+
+    zeilen: list[pd.DataFrame] = []
+    for wahlname in sorted(auswahl, key=lambda w: (jahr(w), w)):
+        try:
+            df_wk = wk_ergebnisse(wahlname)
+        except Exception as e:
+            st.warning(f"Daten für {wahlname} konnten nicht geladen werden: {type(e).__name__}: {e}")
+            continue
+        zeilen.append(df_wk[df_wk["Wahlkreis"] == wahlkreis])
+
+    daten = pd.concat([z for z in zeilen if len(z) > 0], ignore_index=True)
+    if daten.empty:
+        st.info("Für diese Auswahl liegen keine Daten vor.")
+        st.stop()
+
+    sortierte_wahlen = list(dict.fromkeys(daten["Wahl"]))
+    stimmen_matrix = (
+        daten.pivot_table(index="Partei", columns="Wahl", values="Stimmen", aggfunc="sum")
+        .reindex(columns=sortierte_wahlen).fillna(0).astype(int)
+    )
+    gesamt_je_wahl = stimmen_matrix.sum(axis=0)
+    daten["Anteil %"] = daten.apply(
+        lambda z: round(z["Stimmen"] / gesamt_je_wahl[z["Wahl"]] * 100, 1), axis=1
+    )
+
+    letzte = sortierte_wahlen[-1]
+    vorschlag = list(stimmen_matrix[letzte].sort_values(ascending=False).head(5).index)
+    parteien = st.multiselect("Parteien im Vergleich", sorted(stimmen_matrix.index), default=vorschlag)
+    if not parteien:
+        st.info("Bitte mindestens eine Partei auswählen.")
+        st.stop()
+
+    farben = farben_fuer(parteien)
+    ansicht = daten[daten["Partei"].isin(parteien)]
+
+    b1, b2 = st.columns(2)
+    with b1:
+        fig_balken = px.bar(
+            ansicht, x="Wahl", y="Stimmen", color="Partei", barmode="group",
+            title=f"Stimmen je Partei - {wahlkreis}",
+            color_discrete_map=farben,
+            category_orders={"Wahl": sortierte_wahlen, "Partei": parteien},
+        )
+        fig_balken.update_layout(height=460, legend_title_text="Partei")
+        st.plotly_chart(fig_balken, use_container_width=True)
+    with b2:
+        fig_linie = px.line(
+            ansicht, x="Wahl", y="Anteil %", color="Partei", markers=True,
+            title=f"Anteil in % - {wahlkreis}",
+            color_discrete_map=farben,
+            category_orders={"Wahl": sortierte_wahlen, "Partei": parteien},
+        )
+        fig_linie.update_layout(height=460, legend_title_text="Partei", yaxis_ticksuffix=" %")
+        st.plotly_chart(fig_linie, use_container_width=True)
+
+    st.markdown("#### Tabelle: Stimmen (Anteil %)")
+    tabelle = stimmen_matrix.loc[parteien].copy()
+    anteile = (tabelle / tabelle.sum(axis=0) * 100).round(1)
+    formatiert = pd.DataFrame(index=tabelle.index, columns=tabelle.columns, dtype=object)
+    for w in tabelle.columns:
+        formatiert[w] = [
+            f"{int(tabelle.loc[p, w]):,} ({anteile.loc[p, w]:.1f} %)".replace(",", ".")
+            if tabelle.loc[p, w] > 0 else "–"
+            for p in tabelle.index
+        ]
+    formatiert.index.name = "Partei"
+    st.dataframe(formatiert, use_container_width=True, height=420)
+
 else:
+    st.subheader("Überregionaler Vergleich")else:
     st.subheader("Überregionaler Vergleich")
     st.caption("Wuppertaler Stadtergebnis vs. überregionales Ergebnis – Abstand in Prozentpunkten (pp)")
 
