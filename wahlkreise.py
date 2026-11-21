@@ -211,9 +211,19 @@ def _kalibriere_zuordnung(summen: dict[str, int], refs: list[tuple[str, float]],
                 if abs(anteil - wert) <= 0.2:
                     kandidaten.append(spalte)
         if len(kandidaten) != 1:
+            if gesamt is None:
+                diagnose = " | ".join(
+                    f"{spalte}={st}" for spalte, st in sorted(summen.items())
+                )
+            else:
+                diagnose = " | ".join(
+                    f"{spalte}={st} ({st / gesamt * 100:.2f} %)"
+                    for spalte, st in sorted(summen.items())
+                )
             raise ValueError(
                 f"Spaltenkalibrierung fehlgeschlagen für {partei} "
-                f"({len(kandidaten)} Kandidaten: {kandidaten})"
+                f"({len(kandidaten)} Kandidaten: {kandidaten}); gesamt={gesamt}; "
+                f"Spalten: {diagnose}"
             )
         zuordnung[kandidaten[0]] = partei
         belegt.add(kandidaten[0])
