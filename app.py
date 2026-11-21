@@ -369,6 +369,13 @@ elif modus == "Landtagswahlkreis 2027":
             continue
         zeilen.append(df_wk[df_wk["Wahlkreis"] == wahlkreis])
 
+    if not zeilen:
+        st.warning(
+            "Für die ausgewählten Wahlen liegen keine Daten vor - für den "
+            "Wahlkreis 34 (Wuppertal III - Solingen II) sind derzeit nur "
+            "Landtagswahl 2022, Bundestagswahl 2025 und Europawahl 2024 verfügbar."
+        )
+        st.stop()
     daten = pd.concat([z for z in zeilen if len(z) > 0], ignore_index=True)
     if daten.empty:
         st.info("Für diese Auswahl liegen keine Daten vor.")
