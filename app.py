@@ -428,7 +428,6 @@ elif modus == "Landtagswahlkreis 2027":
     st.dataframe(formatiert, use_container_width=True, height=420)
 
 else:
-    st.subheader("Überregionaler Vergleich")else:
     st.subheader("Überregionaler Vergleich")
     st.caption("Wuppertaler Stadtergebnis vs. überregionales Ergebnis – Abstand in Prozentpunkten (pp)")
 
