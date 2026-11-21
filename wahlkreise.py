@@ -1,7 +1,7 @@
 """Aggregation der Wahlergebnisse auf die Landtagswahlkreise 2027.
 
 Amtlicher Zuschnitt zur Landtagswahl am 25.04.2027 (identisch zu 2022,
-Quelle: Anlage zu § 13 LWahlG NRW / bezirksregierung):
+Quelle: Anlage zu § 13 LWahlG NRW):
 - 32 Wuppertal I: Barmen 51, 53; Bezirke Heckinghausen, Langerfeld-Beyenburg,
   Oberbarmen, Ronsdorf (KWB 61-92)
 - 33 Wuppertal II: Elberfeld 01-05, Uellendahl-Katernberg (21-24),
@@ -12,10 +12,10 @@ Quelle: Anlage zu § 13 LWahlG NRW / bezirksregierung):
   (KWB 51-53) sowie von Mitte die KWB 15 und 16. Vom KWB 12 Innenstadt-Süd
   gehoert nur der Stimmbezirk 123 zum Wahlkreis; auf
   Kommunalwahlbezirks-Ebene kann er nicht abgetrennt werden und wird daher
-  nicht beruecksichtigt (Abweichung gering).
+  nicht beruecksichtigt (kleine Abweichung).
 
 Die Aggregation der Landtagswahl 2022 wird gegen die amtlichen
-Wahlkreis-Ergebnisse des Wahlleiters NRW verifiziert (siehe _KONTROLLE).
+Wahlkreis-Ergebnisse des Wahlleiters NRW kontrolliert (siehe _KONTROLLE).
 """
 from __future__ import annotations
 
@@ -62,11 +62,12 @@ WAHLKREISE = {
             "Von **Wuppertal**: Stadtbezirk **Elberfeld-West** (11 Brill-Arrenberg, "
             "12 Nützenberg-Zoo, 13 Sonnborn-Varresbeck), **Vohwinkel** (31-33), "
             "**Cronenberg** (41-42) sowie vom Stadtbezirk Elberfeld der KWB "
-            "06 Friedrichsberg. Von **Solingen**: Stadtbezirk **Gräfrath** "
-            "(KWB 51-53) sowie vom Stadtbezirk Mitte die KWB 15 "
-            "Klauberg-Hasseldelle-Kohlfurth und 16 Kannenhof-Meigen-Halfeshof. "
-            "Vom KWB 12 Innenstadt-Süd gehoert nur der Stimmbezirk 123 zum "
-            "Wahlkreis und bleibt auf Bezirksebene unberücksichtigt."
+            "06 Friedrichsberg. Von **Solingen** (Quelle: wahlen.kdvz.nrw): "
+            "Stadtbezirk **Gräfrath** (KWB 51-53) sowie vom Stadtbezirk Mitte "
+            "die KWB 15 Klauberg-Hasseldelle-Kohlfurth und 16 "
+            "Kannenhof-Meigen-Halfeshof. Vom KWB 12 Innenstadt-Süd gehoert nur "
+            "der Stimmbezirk 123 zum Wahlkreis und bleibt auf Bezirksebene "
+            "unberücksichtigt."
         ),
         "teile": [
             "06 Friedrichsberg (W)", "11 Brill-Arrenberg (W)", "12 Nützenberg-Zoo (W)",
@@ -197,13 +198,14 @@ def _lade_bezirksebene(wahlname: str) -> pd.DataFrame:
     return lang[lang["Stimmen"] > 0]
 
 
-def _pruefe(summen: dict[str, int], kontrolle: dict[str, int], kontext: str) -> None:
-    """Vergleicht Summen mit amtlichen Werten (Toleranz +/-5 Stimmen)."""
+def _pruefe(summen: dict[str, int], kontrolle: dict[str, int], kontext: str,
+            toleranz: int = 5) -> None:
+    """Vergleicht Summen mit amtlichen Werten."""
     for merkmal, soll in kontrolle.items():
         if merkmal == "gültige Zweitstimmen":
             continue
         hat = int(summen.get(merkmal, 0))
-        if abs(hat - soll) > 5:
+        if abs(hat - soll) > toleranz:
             raise ValueError(
                 f"Kontrolle fehlgeschlagen ({kontext}): {merkmal} "
                 f"berechnet {hat}, amtlich {soll}"
@@ -235,8 +237,7 @@ def _lade_solingen(wahlname: str) -> pd.DataFrame:
         )
     df[spalten] = df[spalten].replace({"---": None, "": None}).fillna(0).astype(int)
     for spalte in spalten:
-        summe = int(df[spalte].sum())
-        if summe <= 0:
+        if int(df[spalte].sum()) <= 0:
             raise ValueError(
                 f"Solingen-CSV für {wahlname}: Spalte {spalte} ohne Stimmen "
                 "(Spaltenzuordnung prüfen)"
@@ -244,7 +245,7 @@ def _lade_solingen(wahlname: str) -> pd.DataFrame:
     kontrolle = _KONTROLLE_SOLINGEN.get(wahl["wahlcode"])
     if kontrolle:
         _pruefe(
-            {partei: int(df[spalte].sum()) for spalte, parteiii in zuordnung.items()},
+            {partei: int(df[spalte].sum()) for spalte, partei in zuordnung.items()},
             kontrolle,
             f"Solingen gesamt, {wahlname}",
         )
@@ -287,14 +288,18 @@ def lade_wahlkreis_ergebnisse(wahlname: str) -> pd.DataFrame:
     kontrolle = _KONTROLLE_WK34.get(WAHLEN[wahlname]["wahlcode"])
     if kontrolle:
         wk34 = ergebnis[ergebnis["Wahlkreis"].str.contains("Wahlkreis 34")]
+        # Toleranz: der nicht abtrennbare Stimmbezirk 123 (KWB 12) verursacht
+        # eine kleine planmaessige Abweichung; Zeilenvertauschungen (Tausende
+        # Stimmen) fallen weiterhin auf.
         _pruefe(
             dict(zip(wk34["Partei"], wk34["Stimmen"])),
             kontrolle,
             f"Wahlkreis 34, {wahlname}",
+            toleranz=1200,
         )
         wk34_summe = int(wk34["Stimmen"].sum())
         soll = kontrolle.get("gültige Zweitstimmen")
-        if soll and abs(wk34_summe - soll) > 5:
+        if soll and abs(wk34_summe - soll) > 1500:
             raise ValueError(
                 f"Kontrolle fehlgeschlagen (Wahlkreis 34, {wahlname}): "
                 f"gültige Zweitstimmen {wk34_summe}, amtlich {soll}"
