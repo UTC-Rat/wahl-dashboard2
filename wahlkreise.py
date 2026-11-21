@@ -20,6 +20,7 @@ Wahlkreis-Ergebnisse des Wahlleiters NRW kontrolliert (siehe _KONTROLLE).
 from __future__ import annotations
 
 import io
+import re
 
 import pandas as pd
 
@@ -109,52 +110,28 @@ WAHLKREIS_WAHLEN = sorted(
 # (wahlen.kdvz.nrw, AGS 05122000, Portalsystem identisch zu Wuppertal).
 SOLINGEN_BASIS = "https://wahlen.kdvz.nrw/production/{wahlcode}/05122000/daten/opendata/"
 
-# Nur Wahlen mit NRW-weit einheitlicher Partei-Reihenfolge (Landeslisten /
-# Bundeslisten bzw. landesweite Parteiliste) sind zuverlaessig auswertbar;
-# Spalten-Belegung identisch zum Wuppertaler Archiv derselben Wahl.
-# Lokal geordnete Wahlen (Rats-/OB-Wahlen) bleiben ausgeschlossen.
+# Nur Wahlen mit gesicherter Partei-Zuordnung; die Spalten-Zuordnung
+# fuer bw2025/EW2024 wird zur Laufzeit gegen amtliche Referenzwerte
+# kalibriert (votemanager-Spaltenreihenfolge weicht je Stadt ab).
 _SOLINGEN_QUELLEN = {
-    "lw2022": (
-        "Open-Data-05122000-Landtagswahl-Kommunalwahlbezirk.csv",
-        {
-            "F1": "CDU", "F2": "SPD", "F3": "FDP", "F4": "AfD", "F5": "GRÜNE",
-            "F6": "Die Linke", "F7": "PIRATEN", "F8": "Die PARTEI",
-            "F9": "FREIE WÄHLER", "F10": "BIG", "F11": "ÖDP",
-            "F12": "Volksabstimmung", "F13": "MLPD", "F14": "DIE VIOLETTEN",
-            "F15": "Gesundheitsforschung", "F16": "ZENTRUM", "F17": "DKP",
-            "F18": "dieBasis", "F19": "DSP", "F20": "Die Urbane.",
-            "F21": "LIEBE", "F22": "FAMILIE", "F23": "neo",
-            "F24": "Die Humanisten", "F25": "PdF", "F26": "LfK",
-            "F27": "Tierschutzpartei", "F28": "Team Todenhöfer", "F29": "Volt",
-        },
-    ),
-    "bw2025": (
-        "Open-Data-05122000-Wahl-zum-Deutschen-Bundestag-Kommunalwahlbezirk.csv",
-        {
-            "F1": "SPD", "F2": "CDU", "F3": "GRÜNE", "F4": "FDP", "F5": "AfD",
-            "F6": "Die Linke", "F7": "Tierschutzpartei", "F8": "Die PARTEI",
-            "F9": "dieBasis", "F10": "Team Todenhöfer", "F11": "FREIE WÄHLER",
-            "F12": "Volt", "F13": "MLPD", "F14": "Partei des Fortschritts",
-            "F15": "BÜNDNIS DEUTSCHLAND", "F16": "BSW", "F17": "MERA25",
-            "F18": "WerteUnion", "F19": "Versöhnen statt spalten (Füllmich)",
-            "F20": "Die Gerechtigkeitspartei", "F21": "Dialog statt Aufrüstung",
-        },
-    ),
-    "EW2024": (
-        "Open-Data-05122000-Europawahl-Kommunalwahlbezirk.csv",
-        {
-            "D1": "CDU", "D2": "GRÜNE", "D3": "SPD", "D4": "AfD", "D5": "FDP",
-            "D6": "DIE LINKE", "D7": "Die PARTEI", "D8": "Tierschutzpartei",
-            "D9": "PIRATEN", "D10": "Volt", "D11": "FAMILIE", "D12": "FREIE WÄHLER",
-            "D13": "ÖDP", "D14": "BIG", "D15": "MERA25", "D16": "TIERSCHUTZ hier!",
-            "D17": "PdH", "D18": "HEIMAT", "D19": "Bündnis C",
-            "D20": "Verjüngungsforschung", "D21": "MENSCHLICHE WELT",
-            "D22": "MLPD", "D23": "DKP", "D24": "SGP", "D25": "ABG",
-            "D26": "dieBasis", "D27": "BÜNDNIS DEUTSCHLAND", "D28": "BSW",
-            "D29": "DAVA", "D30": "KLIMALISTE", "D31": "LETZTE GENERATION",
-            "D32": "PDV", "D33": "PdF", "D34": "V-Partei³",
-        },
-    ),
+    "lw2022": "Open-Data-05122000-Landtagswahl-Kommunalwahlbezirk.csv",
+    "bw2025": "Open-Data-05122000-Wahl-zum-Deutschen-Bundestag-Kommunalwahlbezirk.csv",
+    "EW2024": "Open-Data-05122000-Europawahl-Kommunalwahlbezirk.csv",
+}
+
+# Amtliche Referenz: (Partei, Spaltensumme) bzw. (Partei, Anteil in %).
+# LW2022: feste Zuordnung wie Wuppertal (durch amtliche WK-34-Kontrolle
+# bestaetigt). BW2025: Prozentanteile der gueltigen Zweitstimmen lt.
+# Wahlbericht der Stadt Solingen. EW2024: Stimmen lt. kdvz-Ergebnisseite.
+_SOLINGEN_REF = {
+    "bw2025": [
+        ("CDU", 28.02), ("SPD", 19.70), ("AfD", 17.48), ("GRÜNE", 12.01),
+        ("Die Linke", 8.85), ("FDP", 4.72), ("BSW", 4.63),
+    ],
+    "EW2024": [
+        ("CDU", 19283), ("GRÜNE", 9031), ("SPD", 11103),
+        ("AfD", 8710), ("FDP", 4435), ("Die Linke", 1539),
+    ],
 }
 
 # Amtliche Kontrollwerte (gültige Zweitstimmen, Wahlleiter NRW):
@@ -212,6 +189,37 @@ def _pruefe(summen: dict[str, int], kontrolle: dict[str, int], kontext: str,
             )
 
 
+def _kalibriere_zuordnung(summen: dict[str, int], refs: list[tuple[str, float]],
+                          gesamt: int | None) -> dict[str, str]:
+    """Ordnet CSV-Spalten Parteien anhand amtlicher Referenzwerte zu.
+
+    refs: (Partei, Spaltensumme absolut) oder (Partei, Anteil in Prozent,
+    wenn gesamt angegeben). Erfordert eindeutige Zuordnung, sonst Fehler.
+    """
+    zuordnung: dict[str, str] = {}
+    belegt: set[str] = set()
+    for partei, wert in refs:
+        kandidaten: list[str] = []
+        for spalte, st in summen.items():
+            if spalte in belegt:
+                continue
+            if gesamt is None:
+                if abs(st - wert) <= 5:
+                    kandidaten.append(spalte)
+            else:
+                anteil = st / gesamt * 100
+                if abs(anteil - wert) <= 0.2:
+                    kandidaten.append(spalte)
+        if len(kandidaten) != 1:
+            raise ValueError(
+                f"Spaltenkalibrierung fehlgeschlagen für {partei} "
+                f"({len(kandidaten)} Kandidaten: {kandidaten})"
+            )
+        zuordnung[kandidaten[0]] = partei
+        belegt.add(kandidaten[0])
+    return zuordnung
+
+
 def _lade_solingen(wahlname: str) -> pd.DataFrame:
     """Solinger Ergebnisse auf KWB-Ebene aus dem kdvz-Archiv.
 
@@ -219,37 +227,68 @@ def _lade_solingen(wahlname: str) -> pd.DataFrame:
     oder wirft einen Fehler, wenn keine gesicherte Quelle vorliegt.
     """
     wahl = WAHLEN[wahlname]
-    quelle = _SOLINGEN_QUELLEN.get(wahl["wahlcode"])
-    if quelle is None:
+    datei = _SOLINGEN_QUELLEN.get(wahl["wahlcode"])
+    if datei is None:
         raise ValueError(
             f"Keine gesicherte Solingen-Quelle für {wahlname} "
-            "(nur Wahlen mit NRW-weiter Partei-Reihenfolge verfügbar)"
+            "(nur Wahlen mit amtlich gesicherter Spaltenzuordnung verfügbar)"
         )
-    datei, zuordnung = quelle
     url = SOLINGEN_BASIS.format(wahlcode=wahl["wahlcode"]) + datei
     csv_text = _hole(url).text
     df = pd.read_csv(io.StringIO(csv_text), sep=";", encoding="utf-8", dtype=str)
-    spalten = [c for c in df.columns if c in zuordnung]
-    if len(spalten) != len(zuordnung):
-        raise ValueError(
-            f"Solingen-CSV für {wahlname} hat unerwartete Spalten "
-            f"({len(spalten)}/{len(zuordnung)} gefunden)"
-        )
-    df[spalten] = df[spalten].replace({"---": None, "": None}).fillna(0).astype(int)
-    for spalte in spalten:
-        if int(df[spalte].sum()) <= 0:
+    if wahl["wahlcode"] == "lw2022":
+        # Feste Zuordnung (NRW-Landeslisten-Reihenfolge, wie Wuppertal);
+        # bestaetigt durch die amtliche WK-34-Kontrolle unten.
+        zuordnung = {
+            "F1": "CDU", "F2": "SPD", "F3": "FDP", "F4": "AfD", "F5": "GRÜNE",
+            "F6": "Die Linke", "F7": "PIRATEN", "F8": "Die PARTEI",
+            "F9": "FREIE WÄHLER", "F10": "BIG", "F11": "ÖDP",
+            "F12": "Volksabstimmung", "F13": "MLPD", "F14": "DIE VIOLETTEN",
+            "F15": "Gesundheitsforschung", "F16": "ZENTRUM", "F17": "DKP",
+            "F18": "dieBasis", "F19": "DSP", "F20": "Die Urbane.",
+            "F21": "LIEBE", "F22": "FAMILIE", "F23": "neo",
+            "F24": "Die Humanisten", "F25": "PdF", "F26": "LfK",
+            "F27": "Tierschutzpartei", "F28": "Team Todenhöfer", "F29": "Volt",
+        }
+        spalten = [c for c in df.columns if c in zuordnung]
+        if len(spalten) != len(zuordnung):
             raise ValueError(
-                f"Solingen-CSV für {wahlname}: Spalte {spalte} ohne Stimmen "
+                f"Solingen-CSV für {wahlname} hat unerwartete Spalten "
+                f"({len(spalten)}/{len(zuordnung)} gefunden)"
+            )
+        df_stimmen = df[spalten].replace({"---": "0", "": "0"}).fillna("0").astype(int)
+        gesamt = None
+    else:
+        spalten = [c for c in df.columns if re.fullmatch(r"[DF][0-9]+", c)]
+        if not spalten:
+            raise ValueError(f"Keine Stimmen-Spalten für {wahlname} gefunden")
+        df_stimmen = df[spalten].replace({"---": "0", "": "0"}).fillna("0").astype(int)
+        summen = {Spalte: int(df_stimmen[Spalte].sum()) for Spalte in spalten}
+        gesamt = sum(summen.values())
+        if gesamt <= 0:
+            raise ValueError(f"Solingen-CSV für {wahlname} ohne Stimmen")
+        zuordnung = _kalibriere_zuordnung(
+            summen, _SOLINGEN_REF[wahl["wahlcode"]], gesamt
+        )
+        spalten = list(zuordnung)
+
+    for Spalte in spalten:
+        if int(df_stimmen[Spalte].sum()) <= 0:
+            raise ValueError(
+                f"Solingen-CSV für {wahlname}: Spalte {Spalte} ohne Stimmen "
                 "(Spaltenzuordnung prüfen)"
             )
+    df_stimmen = df_stimmen.copy()
     kontrolle = _KONTROLLE_SOLINGEN.get(wahl["wahlcode"])
     if kontrolle:
         _pruefe(
-            {partei: int(df[spalte].sum()) for spalte, partei in zuordnung.items()},
+            {partei: int(df_stimmen[spalte].sum())
+             for spalte, partei in zuordnung.items()},
             kontrolle,
             f"Solingen gesamt, {wahlname}",
         )
-    lang = df[["gebiet-nr"] + spalten].rename(
+    df_stimmen["gebiet-nr"] = df["gebiet-nr"]
+    lang = df_stimmen.rename(
         columns={code: partei_kanonisch(name) for code, name in zuordnung.items()}
     ).melt(id_vars="gebiet-nr", var_name="Partei", value_name="Stimmen")
     return lang[lang["Stimmen"] > 0]
